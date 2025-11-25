@@ -15,13 +15,13 @@ import pandas as pd
 from sqlalchemy import text
 from vnstock import Screener, Trading, Vnstock
 from .preprocess_texts import process_events_for_display
-from ..database.connection import db_connection
+from database.connection import db_connection
 
 warnings.filterwarnings("ignore")
 
 
 def populate_db() -> None:
-    with db_connection.engine.connect() as connection:
+    with db_connection.engine.begin() as connection:
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS tickers"))
         connection.commit()
 
@@ -72,8 +72,7 @@ def populate_db() -> None:
             if officers_info is not None and not officers_info.empty:
                 officers_info["symbol"] = ticker
                 officers_list.append(officers_info)
-
-            time.sleep(5)
+            time.sleep(4)
 
         except Exception as e:
             print(f"Error fetching data for {ticker}: {e}")  # noqa: T201
@@ -86,70 +85,71 @@ def populate_db() -> None:
     profile_df = preprocess_profile(profile_list)
     officers_df = preprocess_officers(officers_list)
 
-    overview_df.to_sql(
-        "overview_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+    with db_connection.engine.begin() as connection:
+        overview_df.to_sql(
+            "overview_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    shareholders_df.to_sql(
-        "shareholders_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        shareholders_df.to_sql(
+            "shareholders_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    events_df.to_sql(
-        "events_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        events_df.to_sql(
+            "events_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    news_df.to_sql(
-        "news_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        news_df.to_sql(
+            "news_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    profile_df.to_sql(
-        "profile_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        profile_df.to_sql(
+            "profile_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    officers_df.to_sql(
-        "officers_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        officers_df.to_sql(
+            "officers_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    stats_df.to_sql(
-        "stats_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        stats_df.to_sql(
+            "stats_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
-    price_df = load_price_df(ticker_list)
-    price_df.to_sql(
-        "price_df",
-        db_connection.engine,
-        schema="tickers",
-        if_exists="replace",
-        index=False,
-    )
+        price_df = load_price_df(ticker_list)
+        price_df.to_sql(
+            "price_df",
+            connection,
+            schema="tickers",
+            if_exists="replace",
+            index=False,
+        )
 
 
 def preprocess_overview(overview_list: list) -> pd.DataFrame:
@@ -328,17 +328,20 @@ def fetch_company_data(symbol: str) -> dict[dict]:
     result = {}
 
     try:
-        for table in tables:
-            try:
-                df = pd.read_sql(
-                    text(f"SELECT * FROM tickers.{table}_df WHERE symbol = :symbol"),
-                    db_connection.engine,
-                    params={"symbol": symbol},
-                )
-                result[table] = df if not df.empty else pd.DataFrame()
-            except Exception as e:
-                print(f"Error fetching {table} data for {symbol}: {e}")
-                result[table] = pd.DataFrame()
+        with db_connection.engine.connect() as connection:
+            for table in tables:
+                try:
+                    df = pd.read_sql(
+                        text(
+                            f"SELECT * FROM tickers.{table}_df WHERE symbol = :symbol"
+                        ),
+                        connection,
+                        params={"symbol": symbol},
+                    )
+                    result[table] = df if not df.empty else pd.DataFrame()
+                except Exception as e:
+                    print(f"Error fetching {table} data for {symbol}: {e}")
+                    result[table] = pd.DataFrame()
     except Exception as e:
         print(f"Error fetching company data for {symbol}: {e}")
         # Return empty dataframes for all tables
