@@ -1,7 +1,7 @@
 name: Ourportfolios Scheduler
 on:
   schedule:
-    - cron: "0 12 * * *" # every 12pm (UTC)
+    - cron: "0 0 /3 * *" # every 3 hours
   workflow_dispatch: {}
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       - name: Sync dependencies
         run: uv sync
 
-      - name: Run etl
+      - name: fetch data
         env:
           DATABASE_URI: ${{ secrets.DATABASE_URI }}
         run: uv run python main.py
